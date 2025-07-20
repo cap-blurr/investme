@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ERC4626, ERC20} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {IVault} from "./IVault.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -13,7 +14,7 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 /// @title BaseAutoLPVault
 /// @notice ERC-4626 vault for automated ETH/USDC liquidity allocation on Base
 /// @dev Upgradeable (UUPS), multi-asset, multi-strategy, with share classes and detailed events
-contract Vault is Initializable, ERC4626, Pausable, ReentrancyGuard, Ownable, UUPSUpgradeable, IVault {
+contract Vault is Initializable, ERC4626Upgradeable, Pausable, ReentrancyGuard, OwnableUpgradeable, UUPSUpgradeable, IVault {
     // =====================
     // ====== EVENTS =======
     // =====================
@@ -94,7 +95,7 @@ contract Vault is Initializable, ERC4626, Pausable, ReentrancyGuard, Ownable, UU
     /// @param initialOwner The initial owner
     function initialize(address _usdc, address initialOwner) public initializer {
         __ERC20_init("Base Auto-LP Vault Share", "baLP");
-        __ERC4626_init(ERC20(_usdc));
+        __ERC4626_init(ERC20Upgradeable(_usdc));
         __Ownable_init(initialOwner);
         __UUPSUpgradeable_init();
         // Optionally, set up roles or initial state here
@@ -150,7 +151,7 @@ contract Vault is Initializable, ERC4626, Pausable, ReentrancyGuard, Ownable, UU
     /// @inheritdoc ERC4626
     function deposit(uint256 assets, address receiver)
         public
-        override(ERC4626, IERC4626)
+        override(ERC4626Upgradeable, IERC4626)
         whenNotPaused
         nonReentrant
         returns (uint256 shares)
@@ -162,7 +163,7 @@ contract Vault is Initializable, ERC4626, Pausable, ReentrancyGuard, Ownable, UU
     /// @inheritdoc ERC4626
     function withdraw(uint256 assets, address receiver, address owner)
         public
-        override(ERC4626, IERC4626)
+        override(ERC4626Upgradeable, IERC4626)
         whenNotPaused
         nonReentrant
         returns (uint256 shares)
@@ -171,7 +172,7 @@ contract Vault is Initializable, ERC4626, Pausable, ReentrancyGuard, Ownable, UU
     }
 
     /// @inheritdoc ERC4626
-    function totalAssets() public view override(ERC4626, IERC4626) returns (uint256) {
+    function totalAssets() public view override(ERC4626Upgradeable, IERC4626) returns (uint256) {
         // TODO: Sum USDC + WETH (converted to USDC) + strategy balances
         return super.totalAssets();
     }
