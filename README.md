@@ -1,66 +1,47 @@
-## Foundry
+# 🛠️ Base Auto-LP Vault
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+**One deposit → automated ETH / USDC liquidity farming on Base (Uniswap V3, Aerodrome, Aave idle buffer).**
 
-Foundry consists of:
+| Metric (auto-updated Mondays 08:00 UTC) | This Week | Lifetime |
+| --------------------------------------- | --------- | -------- |
+| 🧑‍💻 Verified Base contracts             | — | — |
+| ⛽ Txns through vault                    | — | — |
+| 💰 TVL (USDC-eq)                         | — | — |
+| 📈 GitHub contributions                  | — | — |
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+---
 
-## Documentation
+## Why?
 
-https://book.getfoundry.sh/
+Providing LP across venues is powerful but fiddly (ratio maths, fee harvests, gas).  
+**Base Auto-LP** wraps everything in an ERC-4626 vault so builders earn yield while focusing on, well… building.
 
-## Usage
+---
 
-### Build
+## Live Contracts (Base Mainnet – 8453)
 
-```shell
-$ forge build
-```
+| Module                          | Address   | Source Verified |
+|---------------------------------|-----------|-----------------|
+| `BaseAutoLPVault`               | `0x…`     | ✅ |
+| `StrategyUniswapV3_ETH_USDC`    | `0x…`     | ✅ |
 
-### Test
+*(Add new addresses after each deploy.)*
 
-```shell
-$ forge test
-```
+---
 
-### Format
+## Quick Start
 
-```shell
-$ forge fmt
-```
+```bash
+# Clone & install
+git clone https://github.com/<you>/base-auto-lp.git
+cd base-auto-lp
+foundryup             # latest Foundry
+forge install         # pulls lib deps listed in foundry.toml
 
-### Gas Snapshots
+# Run tests & static checks
+forge test -vv
+slither .
 
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+# Dry-run deploy to Base Sepolia
+forge script script/Deploy.s.sol \
+    --rpc-url $BASE_SEPOLIA_RPC --broadcast --verify --dry-run
