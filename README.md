@@ -98,3 +98,5 @@ forge script script/Deploy.s.sol --fork-url <RPC_URL> --broadcast
 - All strategy, trading, and yield optimization logic is handled off-chain by the AI agent.
 - Smart contracts are intentionally minimal for security, gas efficiency, and upgradability.
 - For more details, see the contract source files in `src/`.
+## Deployment Outputs
+Deployment scripts store deployed contract addresses in `deployments/<chainId>.json`. Ensure this directory exists so scripts can write the files.
