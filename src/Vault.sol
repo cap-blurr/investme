@@ -3,8 +3,8 @@ pragma solidity ^0.8.24;
 
 import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {IVault} from "./IVault.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
@@ -14,7 +14,7 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 /// @title AutoYieldVault
 /// @notice Minimal ERC-4626 vault for user deposits and withdrawals
 /// @dev Upgradeable (UUPS), no strategy logic, only accounting and emergency withdrawal
-contract Vault is Initializable, ERC4626Upgradeable, Pausable, ReentrancyGuard, OwnableUpgradeable, UUPSUpgradeable, IVault {
+contract Vault is Initializable, ERC4626Upgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, OwnableUpgradeable, UUPSUpgradeable, IVault {
     // =====================
     // ====== EVENTS =======
     // =====================
@@ -45,6 +45,8 @@ contract Vault is Initializable, ERC4626Upgradeable, Pausable, ReentrancyGuard, 
         __ERC4626_init(ERC20Upgradeable(_asset));
         __Ownable_init(initialOwner);
         __UUPSUpgradeable_init();
+        __Pausable_init();
+        __ReentrancyGuard_init();
     }
 
     /// @inheritdoc UUPSUpgradeable
