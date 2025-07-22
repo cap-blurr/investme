@@ -105,8 +105,8 @@ graph TD
 
 - **Deposit Fee**: 0%
 - **Withdrawal Fee**: 0%
-- **Management Fee**: 0%
-- **Performance Fee**: 15% of profits (only charged on gains)
+- **Management Fee**: 1%
+- **Performance Fee**: 20% of profits (only charged on gains)
 - **No hidden costs**: All protocol fees are included
 
 ## 🚀 Getting Started
