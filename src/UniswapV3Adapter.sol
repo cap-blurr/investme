@@ -13,34 +13,34 @@ contract UniswapV3Adapter is IDEXAdapter {
     event FeesCollected(uint256 indexed positionId, uint256 amount0, uint256 amount1);
 
     /// @inheritdoc IDEXAdapter
-    function swap(address token0, address token1, uint256 amount, uint256 minOut) external pure override returns (uint256) {
+    function swap(address, address, uint256, uint256) external pure override returns (uint256) {
         revert("UniswapV3Adapter: swap not implemented");
     }
 
     /// @inheritdoc IDEXAdapter
     function addLiquidity(
-        address token0,
-        address token1,
-        uint256 amount0,
-        uint256 amount1,
-        int24 tickLower,
-        int24 tickUpper
+        address,
+        address,
+        uint256,
+        uint256,
+        int24,
+        int24
     ) external pure override returns (uint256) {
         revert("UniswapV3Adapter: addLiquidity not implemented");
     }
 
     /// @inheritdoc IDEXAdapter
-    function removeLiquidity(uint256 positionId, uint256 liquidity) external pure override returns (uint256, uint256) {
+    function removeLiquidity(uint256, uint256) external pure override returns (uint256, uint256) {
         revert("UniswapV3Adapter: removeLiquidity not implemented");
     }
 
     /// @inheritdoc IDEXAdapter
-    function collectFees(uint256 positionId) external pure override returns (uint256, uint256) {
+    function collectFees(uint256) external pure override returns (uint256, uint256) {
         revert("UniswapV3Adapter: collectFees not implemented");
     }
 
     /// @inheritdoc IDEXAdapter
-    function getPositionValue(uint256 positionId) external pure override returns (uint256) {
+    function getPositionValue(uint256) external pure override returns (uint256) {
         revert("UniswapV3Adapter: getPositionValue not implemented");
     }
-} 
+}
