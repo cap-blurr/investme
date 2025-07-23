@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 /// @title OptimizedFeeCollector
-/// @notice Ultra gas-optimized fee collection
+/// @notice Ultra gas-optimized fee collection with proper fund transfers
 contract OptimizedFeeCollector {
     
     // =====================
@@ -10,11 +10,15 @@ contract OptimizedFeeCollector {
     // =====================
     event ManagementFeeCollected(address indexed user, uint256 amount);
     event PerformanceFeeCollected(address indexed user, uint256 amount);
+    event FeeRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
+    event FeesTransferred(address indexed recipient, uint256 amount);
 
     // =====================
     // ====== ERRORS =======
     // =====================
     error NotAuthorized();
+    error InvalidAddress();
+    error TransferFailed();
 
     // =====================
     // ====== STORAGE ======
@@ -24,18 +28,22 @@ contract OptimizedFeeCollector {
     address public owner;
 
     // Optimize constants for gas efficiency
-    uint256 private constant MANAGEMENT_FEE_BPS = 100;
-    uint256 private constant PERFORMANCE_FEE_BPS = 2000;
-    uint256 private constant SECONDS_PER_YEAR = 31536000; // Hardcoded for gas savings
+    uint256 private constant MANAGEMENT_FEE_BPS = 100;     // 1%
+    uint256 private constant PERFORMANCE_FEE_BPS = 2000;   // 20%
+    uint256 private constant SECONDS_PER_YEAR = 31536000; // 365 days
+    uint256 private constant BPS_DIVISOR = 10000;
 
     // Pack user fee data into single storage slot
     struct PackedUserFeeData {
-        uint128 highWaterMark;    // 128 bits
-        uint128 lastAccrual;      // 128 bits
+        uint128 highWaterMark;    // 128 bits for value tracking
+        uint128 lastAccrual;      // 128 bits for timestamp
         // Total: 256 bits (1 slot)
     }
     
     mapping(address => PackedUserFeeData) public userFeeData;
+    
+    // Track total fees collected for transfer
+    uint256 public totalPendingFees;
 
     // =====================
     // ====== MODIFIERS ====
@@ -44,9 +52,9 @@ contract OptimizedFeeCollector {
         assembly {
             let _vault := sload(vault.slot)
             let _owner := sload(owner.slot)
-            let caller := caller()
+            let _caller := caller()
             
-            if iszero(or(eq(caller, _vault), eq(caller, _owner))) {
+            if iszero(or(eq(_caller, _vault), eq(_caller, _owner))) {
                 mstore(0x00, 0x82b42900) // NotAuthorized() selector
                 revert(0x1c, 0x04)
             }
@@ -58,62 +66,103 @@ contract OptimizedFeeCollector {
     // ====== CONSTRUCTOR ==
     // =====================
     constructor(address _vault, address _feeRecipient) {
+        if (_vault == address(0) || _feeRecipient == address(0)) revert InvalidAddress();
+        
         vault = _vault;
         feeRecipient = _feeRecipient;
         owner = msg.sender;
     }
 
     // =====================
-    // ====== OPTIMIZED ====
+    // ====== ADMIN ========
     // =====================
     
-    /// @notice Ultra gas-optimized management fee collection
-    function collectManagementFee(address user, uint256 userBalance) external onlyAuthorized returns (uint256 fee) {
+    /// @notice Update fee recipient address
+    function setFeeRecipient(address _feeRecipient) external {
+        if (msg.sender != owner) revert NotAuthorized();
+        if (_feeRecipient == address(0)) revert InvalidAddress();
+        
+        address oldRecipient = feeRecipient;
+        feeRecipient = _feeRecipient;
+        emit FeeRecipientUpdated(oldRecipient, _feeRecipient);
+    }
+
+    // =====================
+    // ====== FEE LOGIC ====
+    // =====================
+    
+    /// @notice Calculate management fee for a user
+    /// @dev Returns fee amount without collecting it
+    function calculateManagementFee(address user, uint256 userBalance) public view returns (uint256 fee) {
         PackedUserFeeData memory data = userFeeData[user];
         
         uint256 nowTime = block.timestamp;
-        uint256 last = data.lastAccrual;
+        uint256 lastAccrual = data.lastAccrual;
         
-        // Handle first-time user with assembly optimization
-        assembly {
-            if iszero(last) { last := nowTime }
-        }
+        // First time user - no fees yet
+        if (lastAccrual == 0) return 0;
         
-        uint256 elapsed = nowTime - last;
+        uint256 elapsed = nowTime - lastAccrual;
         
-        // Optimized fee calculation using bit shifting where possible
-        fee = (userBalance * MANAGEMENT_FEE_BPS * elapsed) / (SECONDS_PER_YEAR * 10000);
-        
-        // Single storage write for updated data
-        userFeeData[user] = PackedUserFeeData({
-            highWaterMark: data.highWaterMark,
-            lastAccrual: uint128(nowTime)
-        });
-        
-        emit ManagementFeeCollected(user, fee);
+        // Calculate annual fee prorated for elapsed time
+        fee = (userBalance * MANAGEMENT_FEE_BPS * elapsed) / (SECONDS_PER_YEAR * BPS_DIVISOR);
     }
     
-    /// @notice Gas-optimized performance fee collection
+    /// @notice Calculate performance fee for a user
+    /// @dev Returns fee amount without collecting it
+    function calculatePerformanceFee(address user, uint256 userBalance) public view returns (uint256 fee) {
+        PackedUserFeeData memory data = userFeeData[user];
+        
+        if (userBalance > data.highWaterMark) {
+            uint256 profit = userBalance - data.highWaterMark;
+            fee = (profit * PERFORMANCE_FEE_BPS) / BPS_DIVISOR;
+        }
+    }
+    
+    /// @notice Collect management fee for a user
+    function collectManagementFee(address user, uint256 userBalance) external onlyAuthorized returns (uint256 fee) {
+        fee = calculateManagementFee(user, userBalance);
+        
+        if (fee > 0) {
+            // Update last accrual timestamp
+            PackedUserFeeData memory data = userFeeData[user];
+            userFeeData[user] = PackedUserFeeData({
+                highWaterMark: data.highWaterMark,
+                lastAccrual: uint128(block.timestamp)
+            });
+            
+            totalPendingFees += fee;
+            emit ManagementFeeCollected(user, fee);
+        }
+    }
+    
+    /// @notice Collect performance fee for a user
     function collectPerformanceFee(address user, uint256 userBalance) external onlyAuthorized returns (uint256 fee) {
         PackedUserFeeData memory data = userFeeData[user];
         
         if (userBalance > data.highWaterMark) {
             uint256 profit = userBalance - data.highWaterMark;
-            fee = (profit * PERFORMANCE_FEE_BPS) / 10000;
+            fee = (profit * PERFORMANCE_FEE_BPS) / BPS_DIVISOR;
             
-            // Update high water mark in single storage write
-            userFeeData[user].highWaterMark = uint128(userBalance);
+            // Update high water mark
+            userFeeData[user] = PackedUserFeeData({
+                highWaterMark: uint128(userBalance),
+                lastAccrual: data.lastAccrual
+            });
             
+            totalPendingFees += fee;
             emit PerformanceFeeCollected(user, fee);
         }
     }
     
-    /// @notice Batch fee collection for multiple users (major gas savings)
+    /// @notice Batch collect fees for multiple users
     function batchCollectFees(
         address[] calldata users, 
         uint256[] calldata balances
     ) external onlyAuthorized returns (uint256 totalManagementFees, uint256 totalPerformanceFees) {
         uint256 length = users.length;
+        require(length == balances.length, "Length mismatch");
+        
         uint256 nowTime = block.timestamp;
         
         for (uint256 i; i < length;) {
@@ -122,28 +171,60 @@ contract OptimizedFeeCollector {
             PackedUserFeeData memory data = userFeeData[user];
             
             // Management fee calculation
-            uint256 last = data.lastAccrual;
-            if (last == 0) last = nowTime;
-            uint256 elapsed = nowTime - last;
-            uint256 mgmtFee = (balance * MANAGEMENT_FEE_BPS * elapsed) / (SECONDS_PER_YEAR * 10000);
-            totalManagementFees += mgmtFee;
+            if (data.lastAccrual > 0) {
+                uint256 elapsed = nowTime - data.lastAccrual;
+                uint256 mgmtFee = (balance * MANAGEMENT_FEE_BPS * elapsed) / (SECONDS_PER_YEAR * BPS_DIVISOR);
+                totalManagementFees += mgmtFee;
+            }
             
             // Performance fee calculation  
             uint256 perfFee;
+            uint128 newHighWaterMark = data.highWaterMark;
             if (balance > data.highWaterMark) {
                 uint256 profit = balance - data.highWaterMark;
-                perfFee = (profit * PERFORMANCE_FEE_BPS) / 10000;
+                perfFee = (profit * PERFORMANCE_FEE_BPS) / BPS_DIVISOR;
                 totalPerformanceFees += perfFee;
-                data.highWaterMark = uint128(balance);
+                newHighWaterMark = uint128(balance);
             }
             
             // Single storage write per user
             userFeeData[user] = PackedUserFeeData({
-                highWaterMark: data.highWaterMark,
+                highWaterMark: newHighWaterMark,
                 lastAccrual: uint128(nowTime)
             });
             
             unchecked { ++i; }
+        }
+        
+        totalPendingFees += totalManagementFees + totalPerformanceFees;
+    }
+    
+    /// @notice Transfer collected fees to recipient
+    /// @dev Vault must transfer the fees to this contract first
+    function transferCollectedFees(address token) external onlyAuthorized {
+        uint256 amount = totalPendingFees;
+        if (amount == 0) return;
+        
+        totalPendingFees = 0;
+        
+        // Transfer fees from vault to recipient
+        (bool success,) = token.call(
+            abi.encodeWithSignature(
+                "transferFrom(address,address,uint256)",
+                vault,
+                feeRecipient,
+                amount
+            )
+        );
+        if (!success) revert TransferFailed();
+        
+        emit FeesTransferred(feeRecipient, amount);
+    }
+    
+    /// @notice Initialize fee tracking for a new user
+    function initializeUser(address user) external onlyAuthorized {
+        if (userFeeData[user].lastAccrual == 0) {
+            userFeeData[user].lastAccrual = uint128(block.timestamp);
         }
     }
 }

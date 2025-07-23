@@ -3,10 +3,10 @@ pragma solidity ^0.8.24;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
-import {Vault} from "../src/Vault.sol";
-import {AIWalletController} from "../src/AIWalletController.sol";
-import {FeeCollector} from "../src/FeeCollector.sol";
-import {EmergencyModule} from "../src/EmergencyModule.sol";
+import {OptimizedVault} from "../src/Vault.sol";
+import {OptimizedAIWalletController} from "../src/AIWalletController.sol";
+import {OptimizedFeeCollector} from "../src/FeeCollector.sol";
+import {OptimizedEmergencyModule} from "../src/EmergencyModule.sol";
 import {UniswapV3Adapter} from "../src/UniswapV3Adapter.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
@@ -17,7 +17,7 @@ contract DeployAutoYield is Script {
         address aiWallet;
         address feeRecipient;
         address[] multiSigSigners;
-        uint256 requiredConfirmations;
+        uint32 requiredConfirmations;
         address usdc;
         address[] initialWhitelistedDexes;
         address[] initialApprovedTokens;
@@ -31,22 +31,22 @@ contract DeployAutoYield is Script {
         vm.startBroadcast();
 
         // 1. Deploy Vault (UUPS Upgradeable)
-        Vault vaultImpl = new Vault();
-        bytes memory initData = abi.encodeCall(Vault.initialize, (config.usdc, config.owner));
+        OptimizedVault vaultImpl = new OptimizedVault();
+        bytes memory initData = abi.encodeCall(OptimizedVault.initialize, (config.usdc, config.owner));
         ERC1967Proxy vaultProxy = new ERC1967Proxy(address(vaultImpl), initData);
-        Vault vault = Vault(address(vaultProxy));
+        OptimizedVault vault = OptimizedVault(address(vaultProxy));
         console2.log("Vault deployed at:", address(vault));
 
         // 2. Deploy AIWalletController
-        AIWalletController controller = new AIWalletController(address(vault), config.aiWallet);
+        OptimizedAIWalletController controller = new OptimizedAIWalletController(address(vault), config.aiWallet);
         console2.log("AIWalletController deployed at:", address(controller));
 
         // 3. Deploy FeeCollector
-        FeeCollector feeCollector = new FeeCollector(address(vault), config.feeRecipient);
+        OptimizedFeeCollector feeCollector = new OptimizedFeeCollector(address(vault), config.feeRecipient);
         console2.log("FeeCollector deployed at:", address(feeCollector));
 
         // 4. Deploy EmergencyModule
-        EmergencyModule emergency = new EmergencyModule(
+        OptimizedEmergencyModule emergency = new OptimizedEmergencyModule(
             address(vault),
             address(controller),
             config.multiSigSigners,
@@ -58,17 +58,30 @@ contract DeployAutoYield is Script {
         UniswapV3Adapter uniswapAdapter = new UniswapV3Adapter();
         console2.log("UniswapV3Adapter deployed at:", address(uniswapAdapter));
 
-        // 6. Configure AIWalletController
-        // Whitelist DEXes
+        // 6. Configure Vault
+        vault.setAIController(address(controller));
+        vault.setFeeCollector(address(feeCollector));
+
+        // 7. Configure AIWalletController
+        // Prepare arrays for batch operations
+        address[] memory dexesToWhitelist = new address[](config.initialWhitelistedDexes.length + 1);
+        bool[] memory dexStatuses = new bool[](dexesToWhitelist.length);
+        
         for (uint256 i = 0; i < config.initialWhitelistedDexes.length; i++) {
-            controller.whitelistDex(config.initialWhitelistedDexes[i]);
+            dexesToWhitelist[i] = config.initialWhitelistedDexes[i];
+            dexStatuses[i] = true;
         }
-        controller.whitelistDex(address(uniswapAdapter)); // Add our adapter
+        dexesToWhitelist[dexesToWhitelist.length - 1] = address(uniswapAdapter);
+        dexStatuses[dexStatuses.length - 1] = true;
+        
+        controller.batchWhitelistDex(dexesToWhitelist, dexStatuses);
 
         // Approve tokens
-        for (uint256 i = 0; i < config.initialApprovedTokens.length; i++) {
-            controller.approveToken(config.initialApprovedTokens[i]);
+        bool[] memory tokenStatuses = new bool[](config.initialApprovedTokens.length);
+        for (uint256 i = 0; i < tokenStatuses.length; i++) {
+            tokenStatuses[i] = true;
         }
+        controller.batchApproveTokens(config.initialApprovedTokens, tokenStatuses);
 
         // Set initial limits
         controller.setLimits(
@@ -76,6 +89,14 @@ contract DeployAutoYield is Script {
             1_000_000e6,  // 1M USDC max position
             100           // 100 operations per day
         );
+
+        // 8. Transfer ownership to multi-sig (if not testing)
+        if (config.owner != msg.sender) {
+            controller.transferOwnership(config.owner);
+            vault.transferOwnership(config.owner);
+            feeCollector.transferOwnership(config.owner);
+            emergency.transferOwnership(config.owner);
+        }
 
         vm.stopBroadcast();
 
@@ -156,7 +177,7 @@ contract DeployAutoYield is Script {
 
             address[] memory dexes = new address[](0);
             address[] memory tokens = new address[](1);
-            tokens[0] = address(0); // Will need to deploy mock USDC
+            tokens[0] = 0x07865c6E87B9F70255377e024ace6630C1Eaa37F; // USDC Goerli
 
             return DeployConfig({
                 owner: msg.sender,
@@ -164,7 +185,7 @@ contract DeployAutoYield is Script {
                 feeRecipient: msg.sender,
                 multiSigSigners: multiSig,
                 requiredConfirmations: 1,
-                usdc: address(0), // Deploy mock in test
+                usdc: tokens[0],
                 initialWhitelistedDexes: dexes,
                 initialApprovedTokens: tokens
             });
