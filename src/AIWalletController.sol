@@ -92,7 +92,7 @@ contract OptimizedAIWalletController {
     }
 
     /// @notice Transfer contract ownership
-    function transferOwnership(address newOwner) external {
+    function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert InvalidInput();
         owner = newOwner;
     }

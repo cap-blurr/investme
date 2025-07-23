@@ -27,12 +27,29 @@ contract DeployAutoYield is Script {
         // Load configuration based on chain
         DeployConfig memory config = getConfig();
         
-        // Start broadcast
+        // Start broadcast - Foundry will use the account specified
         vm.startBroadcast();
+        
+        // Get the actual deployer address after broadcast starts
+        address deployer = msg.sender;
+        console2.log("Deploying from address:", deployer);
+        
+        // Replace address(0) with deployer where needed
+        if (config.owner == address(0)) config.owner = deployer;
+        if (config.aiWallet == address(0)) config.aiWallet = deployer;
+        if (config.feeRecipient == address(0)) config.feeRecipient = deployer;
+        
+        // Update multiSig signers if they contain address(0)
+        for (uint256 i = 0; i < config.multiSigSigners.length; i++) {
+            if (config.multiSigSigners[i] == address(0)) {
+                config.multiSigSigners[i] = deployer;
+            }
+        }
 
         // 1. Deploy Vault (UUPS Upgradeable)
         OptimizedVault vaultImpl = new OptimizedVault();
-        bytes memory initData = abi.encodeCall(OptimizedVault.initialize, (config.usdc, config.owner));
+        // Initialize with the deployer as the initial owner
+        bytes memory initData = abi.encodeCall(OptimizedVault.initialize, (config.usdc, deployer));
         ERC1967Proxy vaultProxy = new ERC1967Proxy(address(vaultImpl), initData);
         OptimizedVault vault = OptimizedVault(address(vaultProxy));
         console2.log("Vault deployed at:", address(vault));
@@ -58,11 +75,14 @@ contract DeployAutoYield is Script {
         UniswapV3Adapter uniswapAdapter = new UniswapV3Adapter();
         console2.log("UniswapV3Adapter deployed at:", address(uniswapAdapter));
 
-        // 6. Configure Vault
+        // 6. Configure Vault (now this will work because deployer is the owner)
         vault.setAIController(address(controller));
         vault.setFeeCollector(address(feeCollector));
 
         // 7. Configure AIWalletController
+        // Set emergency module
+        controller.setEmergencyModule(address(emergency));
+        
         // Prepare arrays for batch operations
         address[] memory dexesToWhitelist = new address[](config.initialWhitelistedDexes.length + 1);
         bool[] memory dexStatuses = new bool[](dexesToWhitelist.length);
@@ -90,8 +110,9 @@ contract DeployAutoYield is Script {
             100           // 100 operations per day
         );
 
-        // 8. Transfer ownership to multi-sig (if not testing)
-        if (config.owner != msg.sender) {
+        // 8. Transfer ownership to multi-sig (if specified and different from deployer)
+        if (config.owner != address(0) && config.owner != deployer) {
+            console2.log("Transferring ownership to:", config.owner);
             controller.transferOwnership(config.owner);
             vault.transferOwnership(config.owner);
             feeCollector.transferOwnership(config.owner);
@@ -107,6 +128,7 @@ contract DeployAutoYield is Script {
         console2.log("FeeCollector:", address(feeCollector));
         console2.log("EmergencyModule:", address(emergency));
         console2.log("UniswapV3Adapter:", address(uniswapAdapter));
+        console2.log("Owner:", config.owner != address(0) ? config.owner : deployer);
         console2.log("========================\n");
 
         // Save deployment addresses
@@ -115,7 +137,8 @@ contract DeployAutoYield is Script {
             address(controller),
             address(feeCollector),
             address(emergency),
-            address(uniswapAdapter)
+            address(uniswapAdapter),
+            deployer
         );
     }
 
@@ -137,7 +160,7 @@ contract DeployAutoYield is Script {
             tokens[1] = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH
 
             return DeployConfig({
-                owner: msg.sender,
+                owner: address(0), // Will use deployer initially
                 aiWallet: 0x4444444444444444444444444444444444444444, // Replace with AI wallet
                 feeRecipient: 0x5555555555555555555555555555555555555555, // Replace
                 multiSigSigners: multiSig,
@@ -149,8 +172,10 @@ contract DeployAutoYield is Script {
         }
         // Base Mainnet
         else if (chainId == 8453) {
-            address[] memory multiSig = new address[](3);
-            multiSig[0] = msg.sender; // For testing
+            address deployerAddress = 0xdB487A73A5b7EF3e773ec115F8C209C12E4EBA37; // Your actual wallet
+            
+            address[] memory multiSig = new address[](1);
+            multiSig[0] = deployerAddress;
 
             address[] memory dexes = new address[](1);
             dexes[0] = 0x2626664c2603336E57B271c5C0b26F421741e481; // Uniswap V3 on Base
@@ -160,9 +185,9 @@ contract DeployAutoYield is Script {
             tokens[1] = 0x4200000000000000000000000000000000000006; // WETH on Base
 
             return DeployConfig({
-                owner: msg.sender,
-                aiWallet: msg.sender, // For testing
-                feeRecipient: msg.sender,
+                owner: deployerAddress,
+                aiWallet: deployerAddress, // For testing
+                feeRecipient: deployerAddress, // For testing
                 multiSigSigners: multiSig,
                 requiredConfirmations: 1,
                 usdc: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913,
@@ -173,16 +198,16 @@ contract DeployAutoYield is Script {
         // Testnet / Local
         else {
             address[] memory multiSig = new address[](1);
-            multiSig[0] = msg.sender;
+            multiSig[0] = 0x1234567890123456789012345678901234567890; // Placeholder, will be replaced with deployer
 
             address[] memory dexes = new address[](0);
             address[] memory tokens = new address[](1);
             tokens[0] = 0x07865c6E87B9F70255377e024ace6630C1Eaa37F; // USDC Goerli
 
             return DeployConfig({
-                owner: msg.sender,
-                aiWallet: msg.sender,
-                feeRecipient: msg.sender,
+                owner: address(0), // Will use deployer
+                aiWallet: address(0), // Will use deployer
+                feeRecipient: address(0), // Will use deployer
                 multiSigSigners: multiSig,
                 requiredConfirmations: 1,
                 usdc: tokens[0],
@@ -197,14 +222,16 @@ contract DeployAutoYield is Script {
         address controller,
         address feeCollector,
         address emergency,
-        address uniswapAdapter
+        address uniswapAdapter,
+        address deployer
     ) internal {
         string memory json = "deployment";
         vm.serializeAddress(json, "vault", vault);
         vm.serializeAddress(json, "controller", controller);
         vm.serializeAddress(json, "feeCollector", feeCollector);
         vm.serializeAddress(json, "emergency", emergency);
-        string memory output = vm.serializeAddress(json, "uniswapAdapter", uniswapAdapter);
+        vm.serializeAddress(json, "uniswapAdapter", uniswapAdapter);
+        string memory output = vm.serializeAddress(json, "deployer", deployer);
         
         string memory filename = string.concat("deployments/", vm.toString(block.chainid), ".json");
         vm.writeJson(output, filename);
