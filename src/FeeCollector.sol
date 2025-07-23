@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 /// @title OptimizedFeeCollector
 /// @notice Ultra gas-optimized fee collection with proper fund transfers
+import {IVault} from "./IVault.sol";
+
 contract OptimizedFeeCollector {
     
     // =====================
@@ -224,7 +226,11 @@ contract OptimizedFeeCollector {
     /// @notice Initialize fee tracking for a new user
     function initializeUser(address user) external onlyAuthorized {
         if (userFeeData[user].lastAccrual == 0) {
-            userFeeData[user].lastAccrual = uint128(block.timestamp);
+            uint256 balance = IVault(vault).convertToAssets(IVault(vault).balanceOf(user));
+            userFeeData[user] = PackedUserFeeData({
+                highWaterMark: uint128(balance),
+                lastAccrual: uint128(block.timestamp)
+            });
         }
     }
 

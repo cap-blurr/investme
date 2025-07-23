@@ -101,6 +101,7 @@ contract AutoYieldTest is Test {
             multiSigSigners,
             2 // Required confirmations
         );
+        controller.setEmergencyModule(address(emergency));
         uniswapAdapter = new UniswapV3Adapter();
         
         // Configure vault
@@ -114,9 +115,13 @@ contract AutoYieldTest is Test {
         statuses[0] = true;
         controller.batchWhitelistDex(dexes, statuses);
         
-        address[] memory tokens = new address[](1);
+        address[] memory tokens = new address[](2);
         tokens[0] = address(usdc);
-        controller.batchApproveTokens(tokens, statuses);
+        tokens[1] = address(0x123);
+        bool[] memory statusTokens = new bool[](2);
+        statusTokens[0] = true;
+        statusTokens[1] = true;
+        controller.batchApproveTokens(tokens, statusTokens);
         
         vm.stopPrank();
         
@@ -124,6 +129,9 @@ contract AutoYieldTest is Test {
         usdc.mint(user1, INITIAL_BALANCE);
         usdc.mint(user2, INITIAL_BALANCE);
         usdc.mint(address(vault), INITIAL_BALANCE); // For fee testing
+
+        vm.prank(owner);
+        vault.syncPrefundedAssets(owner);
     }
     
     // ===== Vault Tests =====
@@ -200,16 +208,12 @@ contract AutoYieldTest is Test {
         
         // First operation should work
         vm.startPrank(aiWallet);
-        vm.expectRevert(); // Will revert on actual swap, but operation count increases
-        controller.executeSwap(address(uniswapAdapter), address(usdc), address(0x123), 1000e6, 900e6);
-        
-        // Second operation should work
-        vm.expectRevert();
-        controller.executeSwap(address(uniswapAdapter), address(usdc), address(0x123), 1000e6, 900e6);
-        
+        controller.recordOperation();
+        controller.recordOperation();
+
         // Third operation should fail due to limit
         vm.expectRevert(OptimizedAIWalletController.DailyLimitExceeded.selector);
-        controller.executeSwap(address(uniswapAdapter), address(usdc), address(0x123), 1000e6, 900e6);
+        controller.recordOperation();
         
         vm.stopPrank();
     }
@@ -286,8 +290,8 @@ contract AutoYieldTest is Test {
         usdc.approve(address(vault), depositAmount);
         uint256 shares = vault.deposit(depositAmount, user1);
         
-        // Check vault balance
-        assertEq(usdc.balanceOf(address(vault)), depositAmount);
+        // Check vault balance increased by deposit
+        assertEq(usdc.balanceOf(address(vault)), INITIAL_BALANCE + depositAmount);
         
         // User withdraws half
         uint256 halfShares = shares / 2;
