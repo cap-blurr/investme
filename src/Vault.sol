@@ -162,6 +162,16 @@ contract OptimizedVault is
     function unpause() external onlyOwner {
         _unpause();
     }
+
+    /// @notice Mint shares for any prefunded assets
+    function syncPrefundedAssets(address receiver) external onlyOwner {
+        uint256 currentAssets = IERC20(asset()).balanceOf(address(this));
+        uint256 represented = convertToAssets(totalSupply());
+        if (currentAssets > represented) {
+            uint256 unaccounted = currentAssets - represented;
+            _mint(receiver, unaccounted);
+        }
+    }
     
     /// @notice Check if caller is authorized (vault owner, AI controller, or fee collector)
     function isAuthorized(address caller) external view returns (bool) {

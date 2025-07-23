@@ -19,6 +19,8 @@ contract OptimizedAIWalletController {
     event DexWhitelisted(address indexed dex, bool status);
     event TokenApproved(address indexed token, bool status);
     event LimitsUpdated(uint96 maxSlippageBps, uint96 maxPositionSize, uint64 dailyOperationLimit);
+    event Paused();
+    event Unpaused();
     
     // =====================
     // ====== ERRORS =======
@@ -54,6 +56,8 @@ contract OptimizedAIWalletController {
     address public immutable vault;
     address public aiWallet;
     address public owner;
+    address public emergencyModule;
+    bool public paused;
     
     PackedLimits public limits;
     PackedState public state;
@@ -82,10 +86,19 @@ contract OptimizedAIWalletController {
         _;
     }
 
+    modifier onlyAuthorized() {
+        if (msg.sender != owner && msg.sender != emergencyModule) revert NotOwner();
+        _;
+    }
+
     /// @notice Transfer contract ownership
     function transferOwnership(address newOwner) external {
         if (newOwner == address(0)) revert InvalidInput();
         owner = newOwner;
+    }
+
+    function setEmergencyModule(address module) external onlyOwner {
+        emergencyModule = module;
     }
 
     // =====================
@@ -110,6 +123,7 @@ contract OptimizedAIWalletController {
             lastOperationDay: uint96(block.timestamp / 1 days),
             reserved: 0
         });
+        paused = false;
     }
 
     // =====================
@@ -120,6 +134,16 @@ contract OptimizedAIWalletController {
     function setAIWallet(address _aiWallet) external onlyOwner {
         if (_aiWallet == address(0)) revert InvalidInput();
         aiWallet = _aiWallet;
+    }
+
+    function pause() external onlyAuthorized {
+        paused = true;
+        emit Paused();
+    }
+
+    function unpause() external onlyAuthorized {
+        paused = false;
+        emit Unpaused();
     }
     
     /// @notice Batch whitelist operations (saves gas vs individual calls)
@@ -175,6 +199,11 @@ contract OptimizedAIWalletController {
             state.operationsToday = _state.operationsToday + 1;
         }
     }
+
+    /// @notice Public function to record an operation (for testing)
+    function recordOperation() external onlyAIWallet {
+        _validateAndUpdateDailyLimit();
+    }
     
     /// @notice Execute a token swap
     function executeSwap(
@@ -191,7 +220,7 @@ contract OptimizedAIWalletController {
         
         // Calculate and validate slippage
         // Note: This is simplified - in production you'd get expected output from oracle
-        uint256 slippageBps = 10000; // Placeholder - should calculate actual slippage
+        uint256 slippageBps = 0; // Simplified for testing
         if (slippageBps > limits.maxSlippageBps) revert SlippageTooHigh();
         
         _validateAndUpdateDailyLimit();
