@@ -227,4 +227,11 @@ contract OptimizedFeeCollector {
             userFeeData[user].lastAccrual = uint128(block.timestamp);
         }
     }
+
+    /// @notice Transfer contract ownership
+    function transferOwnership(address newOwner) external {
+        if (msg.sender != owner) revert NotAuthorized();
+        if (newOwner == address(0)) revert InvalidAddress();
+        owner = newOwner;
+    }
 }

@@ -229,4 +229,11 @@ contract OptimizedEmergencyModule {
         PackedEmergencyState memory state = emergencyState;
         return (state.aiPaused, state.emergencyMode, state.lastActionTimestamp);
     }
+
+    /// @notice Transfer contract ownership
+    function transferOwnership(address newOwner) external {
+        if (msg.sender != owner) revert NotAuthorized();
+        if (newOwner == address(0)) revert InvalidInput();
+        owner = newOwner;
+    }
 }
