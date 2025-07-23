@@ -140,7 +140,7 @@ contract UniswapV3Adapter is IDEXAdapter {
         IERC20(token0).safeTransferFrom(msg.sender, address(this), amount);
         
         // Approve router
-        IERC20(token0).safeApprove(address(SWAP_ROUTER), amount);
+        IERC20(token0).forceApprove(address(SWAP_ROUTER), amount);
         
         // Set up swap params
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
@@ -183,8 +183,8 @@ contract UniswapV3Adapter is IDEXAdapter {
         IERC20(token1).safeTransferFrom(msg.sender, address(this), amount1);
         
         // Approve position manager
-        IERC20(token0).safeApprove(address(POSITION_MANAGER), amount0);
-        IERC20(token1).safeApprove(address(POSITION_MANAGER), amount1);
+        IERC20(token0).forceApprove(address(POSITION_MANAGER), amount0);
+        IERC20(token1).forceApprove(address(POSITION_MANAGER), amount1);
         
         // Order tokens (token0 must be < token1 in Uniswap V3)
         (address orderedToken0, address orderedToken1, uint256 orderedAmount0, uint256 orderedAmount1) = 

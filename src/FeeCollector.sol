@@ -49,11 +49,11 @@ contract OptimizedFeeCollector {
     // ====== MODIFIERS ====
     // =====================
     modifier onlyAuthorized() {
+        address _vault = vault;
+        address _owner = owner;
         assembly {
-            let _vault := sload(vault.slot)
-            let _owner := sload(owner.slot)
             let _caller := caller()
-            
+
             if iszero(or(eq(_caller, _vault), eq(_caller, _owner))) {
                 mstore(0x00, 0x82b42900) // NotAuthorized() selector
                 revert(0x1c, 0x04)
