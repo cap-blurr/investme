@@ -273,8 +273,8 @@ contract UniswapV3Adapter is IDEXAdapter {
 
     /// @inheritdoc IDEXAdapter
     function getPositionValue(uint256 positionId) external view override returns (uint256 value) {
-        // Get position details
-        (,, address token0, address token1,, int24 tickLower, int24 tickUpper, uint128 liquidity,,, uint128 tokensOwed0, uint128 tokensOwed1) = 
+        // Get position details (ignore token pair and ticks for now)
+        (,,,,,,, uint128 liquidity,, , uint128 tokensOwed0, uint128 tokensOwed1) =
             POSITION_MANAGER.positions(positionId);
         
         // This is a simplified value calculation
